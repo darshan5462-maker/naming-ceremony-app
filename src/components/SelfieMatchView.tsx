@@ -23,25 +23,29 @@ export const SelfieMatchView: React.FC<SelfieMatchViewProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Start Front Camera
-  const startCamera = async () => {
+  // Start Front Camera or trigger Native Camera Input
+  const handleOpenCameraButton = async () => {
     setCameraError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
-        audio: false,
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setIsCameraActive(true);
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          setIsCameraActive(true);
+          return;
+        }
+      } catch (err) {
+        console.warn('getUserMedia stream blocked or unavailable, opening native camera picker:', err);
       }
-    } catch (err) {
-      console.error('Camera access error:', err);
-      setCameraError('Camera access denied or unavailable. Please upload a selfie photo instead.');
-      setIsCameraActive(false);
     }
+    // Fallback: Trigger native front camera file capture dialog directly
+    nativeCameraInputRef.current?.click();
   };
 
   // Stop Camera stream
@@ -271,6 +275,16 @@ export const SelfieMatchView: React.FC<SelfieMatchViewProps> = ({
 
           {/* Action Control Buttons */}
           <div className="mt-5 space-y-3">
+            {/* Hidden Native Selfie Camera Input */}
+            <input
+              type="file"
+              ref={nativeCameraInputRef}
+              accept="image/*"
+              capture="user"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
             {isCameraActive ? (
               <button
                 onClick={captureSelfie}
@@ -282,7 +296,7 @@ export const SelfieMatchView: React.FC<SelfieMatchViewProps> = ({
             ) : (
               <>
                 <button
-                  onClick={startCamera}
+                  onClick={handleOpenCameraButton}
                   className="w-full py-3 bg-[#f2ca50] text-[#1a1400] font-bold text-sm rounded-xl shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
                 >
                   <span className="material-symbols-outlined">camera_front</span>
