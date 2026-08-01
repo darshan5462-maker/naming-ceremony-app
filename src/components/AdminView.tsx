@@ -263,13 +263,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
-
-                {/* Location Badge */}
-                <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                  <span className="font-mono text-[10px] text-[#f2ca50] tracking-wider uppercase">
-                    {photo.location}
-                  </span>
-                </div>
               </div>
 
               {/* Card Footer Info & Buttons */}

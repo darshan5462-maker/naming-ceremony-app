@@ -132,8 +132,8 @@ export default function App() {
     await deletePhotoFromFirestore(photoId);
     try {
       await fetch(`/api/photos/${photoId}`, { method: 'DELETE' });
-    } catch (err) {
-      console.error('Delete photo error:', err);
+    } catch {
+      // Bypassed on static Vercel hosting; Firestore handles deletion
     }
   };
 
@@ -149,8 +149,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ caption, location }),
       });
-    } catch (err) {
-      console.error('Update photo error:', err);
+    } catch {
+      // Bypassed on static Vercel hosting; Firestore handles update
     }
   };
 

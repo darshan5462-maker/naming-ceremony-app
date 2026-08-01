@@ -168,8 +168,8 @@ export const UploadView: React.FC<UploadViewProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ photos: itemsToUpload }),
         });
-      } catch (err) {
-        console.error('Upload API error:', err);
+      } catch {
+        // Safe catch for static Vercel / serverless deployments; Firestore has saved items
       }
 
       onUploadSuccess(itemsToUpload);
