@@ -73,7 +73,6 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       ) : (
-        /* Desktop Navigation Links */
         <nav className="hidden md:flex items-center gap-6">
           <button
             onClick={() => setActiveTab('gallery')}
@@ -110,17 +109,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <span>QR SIGNAGE</span>
             <span className="text-[9px] font-sans tracking-normal font-normal opacity-80">ಸ್ಕ್ಯಾನ್ ಮಾಡಿ</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`font-mono text-xs tracking-wider uppercase transition-all px-3 py-1.5 rounded-full flex flex-col items-center ${
-              activeTab === 'upload'
-                ? 'bg-[#f2ca50] text-[#1a1400] font-bold shadow-md shadow-[#f2ca50]/20'
-                : 'text-[#d0c5af] hover:text-[#f2ca50] hover:bg-white/5'
-            }`}
-          >
-            <span>UPLOAD</span>
-            <span className="text-[9px] font-sans tracking-normal font-normal opacity-80">ಅಪ್ಲೋಡ್</span>
           </button>
         </nav>
       )}
