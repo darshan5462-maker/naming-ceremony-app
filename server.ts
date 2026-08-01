@@ -379,6 +379,9 @@ Do not output markdown codeblocks, only raw JSON.`,
   return res.json({ success: true, results });
 });
 
+export { app };
+export default app;
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -399,4 +402,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
