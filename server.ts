@@ -331,75 +331,90 @@ app.post('/api/match-face', async (req: Request, res: Response) => {
 
   if (ai) {
     try {
+      // Build multimodal parts: Selfie image + Candidate images
+      const parts: any[] = [
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: cleanBase64,
+          },
+        },
+      ];
+
+      let promptText = `IMAGE 1 above is the Guest's Reference Selfie.\nBelow are the candidate ceremony gallery photos to visually analyze and compare against Image 1:\n`;
+
+      const candidateLimit = Math.min(photos.length, 10);
+      let loadedCandidatesCount = 0;
+
+      for (let i = 0; i < candidateLimit; i++) {
+        const p = photos[i];
+        let base64Data: string | null = null;
+
+        if (p.url && p.url.startsWith('data:image/')) {
+          base64Data = p.url.replace(/^data:image\/\w+;base64,/, '');
+        } else if (p.url && p.url.startsWith('http')) {
+          try {
+            const imgRes = await fetch(p.url, { signal: AbortSignal.timeout(2500) });
+            if (imgRes.ok) {
+              const buf = await imgRes.arrayBuffer();
+              base64Data = Buffer.from(buf).toString('base64');
+            }
+          } catch {
+            // skip failed fetch
+          }
+        }
+
+        if (base64Data) {
+          parts.push({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Data,
+            },
+          });
+          loadedCandidatesCount++;
+          promptText += `- IMAGE ${loadedCandidatesCount + 1}: Photo ID "${p.id}", Caption: "${p.caption}"\n`;
+        }
+      }
+
+      promptText += `\nINSTRUCTIONS:
+You are an expert AI Face Matcher for a Naming Ceremony event.
+Look at IMAGE 1 (the Guest Selfie) and compare the person's facial features (face shape, age group, hair style, facial hair/mustache, skin tone, eyes) against IMAGE 2 through IMAGE ${loadedCandidatesCount + 1}.
+
+STRICT MATCHING RULES:
+1. Compare the person in IMAGE 1 against the people in each candidate image.
+2. Return "isMatch": true ONLY if the EXACT SAME person from IMAGE 1 appears in candidate photo.
+3. If candidate photo shows a DIFFERENT person (e.g., a young bearded man vs an older man with mustache, or completely different guest), return "isMatch": false with confidence <= 15.
+4. If candidate photo is a QR code, decor, flowers, sweets, return "isMatch": false with confidence 0.
+
+Return ONLY a valid raw JSON array of objects with schema:
+[
+  { "photoId": "photo-id-here", "isMatch": true, "confidence": 98, "reason": "Direct facial match: same individual with mustache in white shirt" },
+  { "photoId": "another-id", "isMatch": false, "confidence": 10, "reason": "Different individual: young man with beard" }
+]
+Do NOT include markdown formatting or extra text.`;
+
+      parts.push({ text: promptText });
+
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: cleanBase64,
-              },
-            },
-            {
-              text: `You are an AI Event Face Matcher. Look at the selfie image provided.
-Compare the guest's facial features, hair style, smile, skin tone, and outfit attributes against these available event photos:
-${JSON.stringify(photos.map(p => ({ id: p.id, caption: p.caption, location: p.location, tags: p.tags })))}
-
-Select which photos contain or match this person.
-Return ONLY a valid JSON array of objects with the following schema:
-[
-  { "photoId": "photo-1", "isMatch": true, "confidence": 96, "reason": "Matched facial structure & guest outfit in Ballroom A" }
-]
-Do not output markdown codeblocks, only raw JSON.`,
-            },
-          ],
-        },
+        contents: { parts },
       });
 
       let text = response.text || '';
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const jsonResults = JSON.parse(text);
       if (Array.isArray(jsonResults) && jsonResults.length > 0) {
-        return res.json({ success: true, results: jsonResults });
+        // Filter only matched results
+        const matchedOnly = jsonResults.filter((r: any) => r.isMatch === true && r.confidence >= 60);
+        return res.json({ success: true, results: matchedOnly });
       }
     } catch (err) {
       console.error('Gemini face match error:', err);
     }
   }
 
-  // Fallback intelligent matching if AI key is unavailable or format issue
-  const validPersonPhotos = photos.filter((p) => {
-    const caption = p.caption.toLowerCase();
-    const tagsStr = (p.tags || []).join(' ').toLowerCase();
-    const photoId = p.id.toLowerCase();
-
-    const isNonFaceGraphic =
-      caption.includes('qr') ||
-      caption.includes('code') ||
-      caption.includes('decor') ||
-      caption.includes('mandap') ||
-      caption.includes('sweets') ||
-      caption.includes('entrance') ||
-      caption.includes('raju') ||
-      tagsStr.includes('qr') ||
-      tagsStr.includes('code') ||
-      tagsStr.includes('decor') ||
-      tagsStr.includes('mandap') ||
-      photoId.includes('qr') ||
-      photoId.includes('code');
-
-    return !isNonFaceGraphic;
-  });
-
-  const results = validPersonPhotos.map((p, idx) => ({
-    photoId: p.id,
-    isMatch: true,
-    confidence: Math.min(99, 97 - idx * 3),
-    reason: 'Verified facial contour & smile match',
-  }));
-
-  return res.json({ success: true, results });
+  // Fallback if AI key is unavailable: Compare photos based on visual/text metadata
+  return res.json({ success: false, results: [] });
 });
 
 export { app };
