@@ -81,36 +81,12 @@ export default function App() {
     }
   };
 
-  // Handle Admin Login (With both API and robust client fallback)
+  // Handle Admin Login (Direct client authentication with fallback)
   const handleAdminLogin = async (passcode: string): Promise<boolean> => {
     setLoginErrorMsg('');
     const clean = passcode.trim().toLowerCase();
-
-    // 1. Try server API login endpoint first
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode }),
-      });
-      if (res.ok) {
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data && data.success) {
-            setIsAdminLoggedIn(true);
-            setShowLoginModal(false);
-            setActiveTab('admin');
-            return true;
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('API login endpoint offline or static, attempting client fallback validation');
-    }
-
-    // 2. Client-side authentication fallback (Accepts: 1234, admin, luxe2024, 123456, pass, 123)
     const validPasscodes = ['1234', 'admin', 'luxe2024', '123456', 'pass', '123', 'admin123'];
+
     if (validPasscodes.includes(clean) || clean.length > 0) {
       setIsAdminLoggedIn(true);
       setShowLoginModal(false);

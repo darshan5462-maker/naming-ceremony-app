@@ -162,16 +162,6 @@ export const UploadView: React.FC<UploadViewProps> = ({
         }
       }
 
-      try {
-        await fetch('/api/photos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ photos: itemsToUpload }),
-        });
-      } catch {
-        // Safe catch for static Vercel / serverless deployments; Firestore has saved items
-      }
-
       onUploadSuccess(itemsToUpload);
 
       setTimeout(() => {
