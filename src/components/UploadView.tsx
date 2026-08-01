@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { SelectedMedia, ActiveTab } from '../types';
+import { addPhotoToFirestore } from '../services/firestoreService';
 
 interface UploadViewProps {
   onUploadSuccess: (newPhotos: Array<{ url: string; caption: string; location: string }>) => void;
@@ -134,12 +135,32 @@ export const UploadView: React.FC<UploadViewProps> = ({
       clearInterval(interval);
       setUploadProgress(100);
 
-      // Prepare items for API upload
+      // Save uploaded items to Firestore and API
       const itemsToUpload = selectedMediaList.map((item) => ({
         url: item.previewUrl,
-        caption: item.caption || activeCaption || 'Captured moment at LUXE LIVE 2024',
-        location: item.location || activeLocation || 'Ballroom A',
+        caption: item.caption || activeCaption || 'Captured moment at Naming Ceremony 👶✨',
+        location: item.location || activeLocation || 'Grand Hall',
       }));
+
+      // Add to Firestore so all devices get real-time persisted updates
+      for (const item of itemsToUpload) {
+        try {
+          await addPhotoToFirestore({
+            url: item.url,
+            caption: item.caption,
+            location: item.location.replace(/ [^\s]+$/, ''),
+            uploadedAt: new Date().toISOString(),
+            timeAgo: 'Just now',
+            likesCount: 0,
+            sharesCount: 0,
+            photographer: 'Official Photographer',
+            aspectRatio: 'portrait',
+            tags: ['naming', 'ceremony', 'live'],
+          });
+        } catch (fsErr) {
+          console.error('Failed to save to Firestore:', fsErr);
+        }
+      }
 
       try {
         await fetch('/api/photos', {

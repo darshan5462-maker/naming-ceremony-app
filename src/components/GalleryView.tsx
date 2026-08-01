@@ -291,15 +291,6 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         )}
       </section>
 
-      {/* Floating Upload FAB on Mobile/Desktop */}
-      <button
-        onClick={() => setActiveTab('upload')}
-        className="fixed bottom-24 right-6 md:right-12 z-40 flex items-center gap-3 px-6 py-4 bg-[#f2ca50] text-[#3c2f00] rounded-full shadow-[0px_20px_40px_rgba(242,202,80,0.3)] hover:scale-105 active:scale-95 transition-all duration-300 font-mono font-bold text-xs tracking-widest"
-      >
-        <span className="material-symbols-outlined font-bold text-xl">cloud_upload</span>
-        <span className="hidden sm:inline">UPLOAD PHOTO</span>
-      </button>
-
       {/* Real-time SSE Notification Toast matching Screenshot 2 */}
       {newPhotoToast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] transition-all duration-500 ease-out animate-in slide-in-from-bottom-6">

@@ -1,6 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Photo, EventStats, ActiveTab } from './types';
 import { initialPhotos } from './data/initialPhotos';
+import {
+  subscribePhotos,
+  likePhotoInFirestore,
+  deletePhotoFromFirestore,
+  updatePhotoInFirestore,
+  calculateEventStats,
+} from './services/firestoreService';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { GalleryView } from './components/GalleryView';
@@ -23,103 +30,35 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
 
-  // Fetch initial photos list from API
-  const fetchPhotos = useCallback(async () => {
-    try {
-      const res = await fetch('/api/photos');
-      if (res.ok) {
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data && data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-            setPhotos(data.photos);
-          }
+  // 1. Subscribe to Firestore realtime photo changes across all devices
+  useEffect(() => {
+    let previousCount = 0;
+    const unsubscribe = subscribePhotos((updatedPhotos) => {
+      setPhotos(updatedPhotos);
+      setStats(calculateEventStats(updatedPhotos));
+
+      // Show toast if new photo was added by another device or photographer
+      if (previousCount > 0 && updatedPhotos.length > previousCount) {
+        const latestPhoto = updatedPhotos[0];
+        if (latestPhoto) {
+          setNewPhotoToast(latestPhoto);
         }
       }
-    } catch (err) {
-      console.error('Failed to fetch photos from API:', err);
-    }
+      previousCount = updatedPhotos.length;
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Fetch event stats
-  const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch('/api/stats');
-      if (res.ok) {
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data && data.stats) {
-            setStats(data.stats);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    }
-  }, []);
-
+  // Update stats whenever photos change
   useEffect(() => {
-    fetchPhotos();
-    fetchStats();
-  }, [fetchPhotos, fetchStats]);
-
-  // Connect to SSE stream for real-time photo broadcasts
-  useEffect(() => {
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource('/api/stream');
-
-      eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-
-          if (payload.type === 'NEW_PHOTO' && payload.photo) {
-            setPhotos((prev) => [payload.photo, ...prev]);
-            setNewPhotoToast(payload.photo);
-            fetchStats();
-          } else if (payload.type === 'LIKE_UPDATE') {
-            setPhotos((prev) =>
-              prev.map((p) =>
-                p.id === payload.photoId ? { ...p, likesCount: payload.likesCount } : p
-              )
-            );
-            if (selectedPhoto && selectedPhoto.id === payload.photoId) {
-              setSelectedPhoto((prev) =>
-                prev ? { ...prev, likesCount: payload.likesCount } : null
-              );
-            }
-          } else if (payload.type === 'PHOTO_UPDATED' && payload.photo) {
-            setPhotos((prev) =>
-              prev.map((p) => (p.id === payload.photo.id ? payload.photo : p))
-            );
-          } else if (payload.type === 'PHOTO_DELETED' && payload.photoId) {
-            setPhotos((prev) => prev.filter((p) => p.id !== payload.photoId));
-            if (selectedPhoto && selectedPhoto.id === payload.photoId) {
-              setSelectedPhoto(null);
-            }
-            fetchStats();
-          }
-        } catch (e) {
-          console.error('SSE parse error', e);
-        }
-      };
-
-      eventSource.onerror = () => {
-        // SSE disconnected, silent retry handled natively by browser
-      };
-    } catch (e) {
-      console.error('SSE connection failed', e);
+    if (photos.length > 0) {
+      setStats(calculateEventStats(photos));
     }
+  }, [photos]);
 
-    return () => {
-      if (eventSource) eventSource.close();
-    };
-  }, [fetchStats, selectedPhoto]);
-
-  // Handle Likes
+  // Handle Likes via Firestore + local optimistic state
   const handleLikePhoto = async (photoId: string) => {
-    // Optimistic UI update
     setPhotos((prev) =>
       prev.map((p) => (p.id === photoId ? { ...p, likesCount: p.likesCount + 1 } : p))
     );
@@ -127,14 +66,18 @@ export default function App() {
       setSelectedPhoto((prev) => (prev ? { ...prev, likesCount: prev.likesCount + 1 } : null));
     }
 
+    // Persist in Firestore
+    await likePhotoInFirestore(photoId);
+
+    // Optional API call if backend server is active
     try {
       await fetch(`/api/photos/${photoId}/like`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'like' }),
       });
-    } catch (err) {
-      console.error('Like error:', err);
+    } catch {
+      // Backend offline or static Vercel build; Firestore handles state!
     }
   };
 
@@ -186,6 +129,7 @@ export default function App() {
   // Handle Photo Delete (Admin)
   const handleDeletePhoto = async (photoId: string) => {
     setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    await deletePhotoFromFirestore(photoId);
     try {
       await fetch(`/api/photos/${photoId}`, { method: 'DELETE' });
     } catch (err) {
@@ -198,6 +142,7 @@ export default function App() {
     setPhotos((prev) =>
       prev.map((p) => (p.id === photoId ? { ...p, caption, location } : p))
     );
+    await updatePhotoInFirestore(photoId, { caption, location });
     try {
       await fetch(`/api/photos/${photoId}`, {
         method: 'PATCH',
@@ -267,8 +212,6 @@ export default function App() {
                 }));
                 setPhotos((prev) => [...formattedNewPhotos, ...prev]);
               }
-              fetchPhotos();
-              fetchStats();
             }}
             setActiveTab={setActiveTab}
             isAdminLoggedIn={isAdminLoggedIn}
