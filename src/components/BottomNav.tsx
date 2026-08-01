@@ -45,24 +45,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         <span className="font-mono text-[10px] mt-0.5 tracking-wider font-semibold">ಮುಖ ಗುರುತು</span>
       </button>
 
-      {/* Upload Tab */}
-      <button
-        onClick={() => setActiveTab('upload')}
-        className={`flex flex-col items-center justify-center transition-all duration-200 ${
-          activeTab === 'upload'
-            ? 'text-[#f2ca50] scale-105'
-            : 'text-[#d0c5af]/70 hover:text-[#f2ca50] active:scale-90'
-        }`}
-      >
-        <span
-          className="material-symbols-outlined text-2xl"
-          style={{ fontVariationSettings: activeTab === 'upload' ? "'FILL' 1" : "'FILL' 0" }}
-        >
-          add_circle
-        </span>
-        <span className="font-mono text-[10px] mt-0.5 tracking-wider font-semibold">ಅಪ್ಲೋಡ್</span>
-      </button>
-
       {/* Scan QR Tab */}
       <button
         onClick={() => setActiveTab('scan')}
