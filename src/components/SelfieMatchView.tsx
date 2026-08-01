@@ -106,16 +106,34 @@ export const SelfieMatchView: React.FC<SelfieMatchViewProps> = ({
     }, 200);
 
     try {
+      // 1. Try backend multimodal AI face matching endpoint first
+      const apiRes = await fetch('/api/match-face', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selfieBase64: base64Selfie }),
+      });
+
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data.success && Array.isArray(data.results)) {
+          clearInterval(interval);
+          setScanProgress(100);
+          setMatchedResults(data.results);
+          return;
+        }
+      }
+
+      // 2. Client-side fallback if server API is unavailable
       const results = await matchSelfieToPhotos(base64Selfie, photos);
       clearInterval(interval);
       setScanProgress(100);
       setMatchedResults(results);
     } catch (err) {
       console.error('Face match error:', err);
+      const results = await matchSelfieToPhotos(base64Selfie, photos);
       clearInterval(interval);
       setScanProgress(100);
-      // Fallback
-      setMatchedResults([]);
+      setMatchedResults(results);
     } finally {
       setTimeout(() => {
         setIsScanning(false);
