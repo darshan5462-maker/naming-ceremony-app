@@ -92,15 +92,18 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
         <div className="relative z-10 text-center max-w-4xl mx-auto space-y-6">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#f2ca50]/15 border border-[#f2ca50]/30 text-[#f2ca50] font-mono text-xs font-semibold uppercase tracking-widest">
-            <span className="material-symbols-outlined text-sm">child_care</span> BLESSINGS & CELEBRATION
+            <span className="material-symbols-outlined text-sm">child_care</span> BLESSINGS & CELEBRATION • ಆಶೀರ್ವಾದ
           </div>
 
           <h2 className="font-display text-4xl sm:text-6xl md:text-7xl tracking-tight leading-none text-[#e5e2e1] font-bold">
             Grand <br />
             <span className="text-[#f2ca50] italic font-serif">Naming Ceremony 👶✨</span>
           </h2>
+          <p className="font-serif italic text-lg md:text-xl text-[#f2ca50]/90">
+            "ಶುಭ ನಾಮಕರಣ ಸಮಾರಂಭ - ಆಶೀರ್ವಾದ ಮತ್ತು ಶುಭ ಹಾರೈಕೆಗಳು"
+          </p>
 
-          <p className="font-body text-base md:text-lg text-[#d0c5af] max-w-xl mx-auto leading-relaxed">
+          <p className="font-body text-sm md:text-base text-[#d0c5af] max-w-xl mx-auto leading-relaxed">
             Welcome to the live celebration on <span className="text-[#f2ca50] font-semibold">August 5th, 2026</span>. Capturing sacred rituals, cradle blessings, and joyous family moments live.
           </p>
 

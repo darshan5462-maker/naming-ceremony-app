@@ -1,76 +1,57 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Photo, FaceMatchResult, ActiveTab } from '../types';
+import { Photo, FaceMatchResult } from '../types';
+import { matchSelfieToPhotos } from '../utils/faceMatcher';
 
 interface SelfieMatchViewProps {
   photos: Photo[];
-  onSelectPhoto: (photo: Photo) => void;
-  onLikePhoto: (photoId: string) => void;
-  setActiveTab: (tab: ActiveTab) => void;
+  onOpenLightbox: (photo: Photo) => void;
+  onGoToGallery: () => void;
 }
 
 export const SelfieMatchView: React.FC<SelfieMatchViewProps> = ({
   photos,
-  onSelectPhoto,
-  onLikePhoto,
-  setActiveTab,
+  onOpenLightbox,
+  onGoToGallery,
 }) => {
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   const [matchedResults, setMatchedResults] = useState<FaceMatchResult[] | null>(null);
-  const [useWebcam, setUseWebcam] = useState<boolean>(false);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user'); // Default to FRONT camera for easy guest selfie!
-  const [webcamError, setWebcamError] = useState<string>('');
-  const [downloadingBatch, setDownloadingBatch] = useState<boolean>(false);
-  const [downloadStatus, setDownloadStatus] = useState<string>('');
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
-  // Start webcam stream with front camera by default
+  // Start Front Camera
   const startCamera = async () => {
-    setWebcamError('');
+    setCameraError(null);
     try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } },
+        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
         audio: false,
       });
-      streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
+        setIsCameraActive(true);
       }
-      setUseWebcam(true);
-    } catch (err: any) {
-      console.error('Webcam access error:', err);
-      // Fallback request without exact constraints
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
-        setUseWebcam(true);
-      } catch (e) {
-        setWebcamError('Camera permission denied or unavailable. Please choose a photo from your gallery below! 📸');
-        setUseWebcam(false);
-      }
+    } catch (err) {
+      console.error('Camera access error:', err);
+      setCameraError('Camera access denied or unavailable. Please upload a selfie photo instead.');
+      setIsCameraActive(false);
     }
   };
 
-  // Stop webcam stream
+  // Stop Camera stream
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
     }
-    setUseWebcam(false);
+    setIsCameraActive(false);
   };
 
   useEffect(() => {
@@ -79,468 +60,383 @@ export const SelfieMatchView: React.FC<SelfieMatchViewProps> = ({
     };
   }, []);
 
-  const handleCaptureWebcam = () => {
+  // Capture Selfie photo from Video stream
+  const captureSelfie = () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      canvas.height = video.videoHeight || 640;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // Mirror horizontally if front camera
-        if (facingMode === 'user') {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-        }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
         setSelfieImage(dataUrl);
         stopCamera();
-        processFaceMatch(dataUrl);
+        runFaceMatch(dataUrl);
       }
     }
   };
 
+  // Handle uploaded selfie photo file
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
       const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setSelfieImage(dataUrl);
-        stopCamera();
-        processFaceMatch(dataUrl);
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const dataUrl = event.target.result as string;
+          setSelfieImage(dataUrl);
+          stopCamera();
+          runFaceMatch(dataUrl);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const processFaceMatch = async (_base64Selfie: string) => {
+  // Run Intelligent Face Match Engine
+  const runFaceMatch = async (base64Selfie: string) => {
     setIsScanning(true);
-    setScanProgress(15);
+    setScanProgress(10);
+    setMatchedResults(null);
 
     const interval = setInterval(() => {
-      setScanProgress((prev) => (prev < 90 ? prev + 25 : prev));
+      setScanProgress((prev) => (prev < 85 ? prev + 15 : prev));
     }, 200);
 
-    setTimeout(() => {
+    try {
+      const results = await matchSelfieToPhotos(base64Selfie, photos);
       clearInterval(interval);
       setScanProgress(100);
-      fallbackLocalMatch();
+      setMatchedResults(results);
+    } catch (err) {
+      console.error('Face match error:', err);
+      clearInterval(interval);
+      setScanProgress(100);
+      // Fallback
+      setMatchedResults([]);
+    } finally {
       setTimeout(() => {
         setIsScanning(false);
       }, 400);
-    }, 1200);
+    }
   };
 
-  const fallbackLocalMatch = () => {
-    // Select all photos in the event collection (including uploaded photos like group photos, family selfies, etc.)
-    const facePhotos = photos.filter((p) => {
-      const tagsStr = (p.tags || []).join(' ').toLowerCase();
-      // Exclude only pure decor if tagged explicitly
-      const isPureDecorOnly = tagsStr.includes('decor-only') || tagsStr.includes('flowers-only');
-      return !isPureDecorOnly;
-    });
-
-    const targetList = facePhotos.length > 0 ? facePhotos : photos;
-
-    const results: FaceMatchResult[] = targetList.map((p, index) => ({
-      photoId: p.id,
-      isMatch: true,
-      confidence: Math.max(88, Math.min(99, 98 - (index % 4) * 3)),
-      reason: `Verified facial contour & smile match in ${p.location || 'Ceremony Hall'}`,
-    }));
-
-    setMatchedResults(results);
-  };
-
-  const handleReset = () => {
+  const handleResetSelfie = () => {
     setSelfieImage(null);
     setMatchedResults(null);
     setIsScanning(false);
     stopCamera();
   };
 
-  // Filter matched photos list
-  const matchedPhotos = photos
-    .map((photo) => {
-      const match = matchedResults?.find((m) => m.photoId === photo.id && m.isMatch);
-      if (match) {
-        return {
-          ...photo,
-          matchConfidence: match.confidence,
-          matchReason: match.reason,
-        };
-      }
-      return null;
-    })
-    .filter((p): p is Photo & { matchConfidence: number; matchReason?: string } => p !== null)
-    .sort((a, b) => (b.matchConfidence || 0) - (a.matchConfidence || 0));
+  // Map matched results to photo items
+  const matchedPhotosWithConfidence = matchedResults
+    ? matchedResults
+        .map((r) => {
+          const photo = photos.find((p) => p.id === r.photoId);
+          if (!photo) return null;
+          return {
+            ...photo,
+            matchConfidence: r.confidence,
+            matchReason: r.reason,
+          };
+        })
+        .filter(Boolean) as (Photo & { matchConfidence: number; matchReason?: string })[]
+    : [];
 
-  // Easily download all matched photos for guests!
-  const handleDownloadAllMatched = async () => {
-    if (matchedPhotos.length === 0) return;
-    setDownloadingBatch(true);
-    setDownloadStatus(`Preparing to download ${matchedPhotos.length} matched photos... 📥`);
-
-    for (let i = 0; i < matchedPhotos.length; i++) {
-      const photo = matchedPhotos[i];
-      setDownloadStatus(`Downloading photo ${i + 1} of ${matchedPhotos.length}... 📸`);
-      try {
-        const response = await fetch(photo.url);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
+  const handleDownloadAllMatches = () => {
+    matchedPhotosWithConfidence.forEach((p, idx) => {
+      setTimeout(() => {
         const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `naming-ceremony-matched-photo-${i + 1}-${photo.id}.jpg`;
+        a.href = p.url;
+        a.download = `naming-ceremony-matched-${p.id}.jpg`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        await new Promise((resolve) => setTimeout(resolve, 600)); // Small delay between downloads
-      } catch (err) {
-        console.error('Error downloading photo:', err);
-      }
-    }
-
-    setDownloadStatus(`✨ All ${matchedPhotos.length} photos downloaded successfully! 🎉`);
-    setTimeout(() => {
-      setDownloadingBatch(false);
-      setDownloadStatus('');
-    }, 4000);
+      }, idx * 300);
+    });
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-32 px-5 md:px-16 max-w-[1440px] mx-auto w-full">
-      {/* Hidden canvas for webcam frame snapshot */}
-      <canvas ref={canvasRef} className="hidden" />
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileUpload}
-        accept="image/*"
-        className="hidden"
-      />
-
+    <div className="max-w-7xl mx-auto px-4 md:px-12 py-10 pt-24 min-h-screen text-[#e5e2e1]">
       {/* Header Banner */}
-      <section className="text-center max-w-2xl mx-auto mb-10 space-y-3">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#f2ca50]/15 border border-[#f2ca50]/30 text-[#f2ca50] font-mono text-xs font-semibold uppercase tracking-widest">
-          <span className="material-symbols-outlined text-sm">face</span> AI SELFIE FACE MATCH 👶✨
+      <div className="text-center max-w-2xl mx-auto mb-10">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#f2ca50]/10 border border-[#f2ca50]/30 text-[#f2ca50] font-mono text-xs uppercase tracking-widest mb-3">
+          <span className="material-symbols-outlined text-sm">center_focus_strong</span>
+          <span>AI SELFIE MATCH • ಮುಖದ ಮೂಲಕ ಹುಡುಕಿ</span>
         </div>
-        <h2 className="font-display font-bold text-3xl md:text-5xl text-[#e5e2e1] tracking-tight">
-          Find Your Photos Instantly 📸
+        <h2 className="font-display font-bold text-3xl md:text-4xl text-[#f2ca50] tracking-tight">
+          Find All Your Ceremony Pictures Live
         </h2>
-        <p className="font-body text-sm text-[#d0c5af]/80">
-          Snap a quick selfie with your front camera. Our AI automatically scans all Naming Ceremony photos and gives you <span className="text-[#f2ca50] font-medium">all your pictures with 1-click download! 🍼💖</span>
+        <p className="text-[#c4b595] text-sm md:text-base mt-2 font-sans leading-relaxed">
+          Snap or upload a quick selfie. Our AI scans all official photographer uploads to instantly bring you every photo featuring your face.
         </p>
-      </section>
+      </div>
 
-      {/* STEP 1: INITIAL CAPTURE OR WEBCAM MODE */}
-      {!selfieImage && !useWebcam && (
-        <div className="max-w-xl mx-auto glass-panel p-8 sm:p-10 rounded-3xl border-[#f2ca50]/30 shadow-2xl text-center space-y-8 animate-in fade-in duration-300">
-          <div className="w-24 h-24 rounded-full bg-[#f2ca50]/15 border-2 border-dashed border-[#f2ca50]/50 flex items-center justify-center mx-auto text-[#f2ca50] shadow-lg shadow-[#f2ca50]/10">
-            <span className="material-symbols-outlined text-5xl">face</span>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="font-display font-bold text-2xl text-[#e5e2e1]">
-              Snap Your Selfie 🤳✨
+      {/* Main Container */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Camera / Selfie Capture Card */}
+        <div className="lg:col-span-4 bg-[#1a1612] border border-[#f2ca50]/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display font-bold text-lg text-[#f2ca50] flex items-center gap-2">
+              <span className="material-symbols-outlined text-xl">camera_front</span>
+              Your Reference Selfie
             </h3>
-            <p className="text-xs text-[#d0c5af]/80 font-body">
-              Front camera opens automatically. Face directly into the screen with a warm smile! 😊
-            </p>
-          </div>
-
-          {webcamError && (
-            <p className="text-xs text-amber-300 bg-amber-400/10 p-3 rounded-xl border border-amber-400/20">
-              {webcamError}
-            </p>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              onClick={startCamera}
-              className="py-4 px-6 bg-[#f2ca50] text-[#3c2f00] font-mono font-bold text-xs tracking-wider rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#f2ca50]/20 flex items-center justify-center gap-2"
-            >
-              <span className="material-symbols-outlined text-xl">photo_camera</span>
-              OPEN FRONT CAMERA 🤳
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="py-4 px-6 bg-white/5 border border-white/10 hover:border-[#f2ca50]/50 text-[#e5e2e1] font-mono font-bold text-xs tracking-wider rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-            >
-              <span className="material-symbols-outlined text-xl">file_upload</span>
-              CHOOSE FROM GALLERY 🖼️
-            </button>
-          </div>
-
-          <div className="pt-4 border-t border-white/10 flex items-center justify-center gap-6 font-mono text-[11px] text-[#d0c5af]/60">
-            <span className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-xs text-emerald-400">lock</span> Secure & Encrypted
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-xs text-[#f2ca50]">bolt</span> Gemini 3.6 AI Match
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* WEBCAM CAMERA STREAM VIEW (Default Front Camera) */}
-      {useWebcam && !selfieImage && (
-        <div className="max-w-md mx-auto relative glass-panel rounded-3xl overflow-hidden border-[#f2ca50]/50 shadow-2xl animate-in zoom-in-95 duration-200">
-          <div className="relative aspect-[3/4] bg-black">
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-            />
-
-            {/* Face Oval Overlay */}
-            <div className="absolute inset-0 border-[3px] border-dashed border-[#f2ca50]/80 rounded-[50%] m-12 pointer-events-none animate-pulse flex items-center justify-center">
-              <span className="font-mono text-[11px] text-[#f2ca50] font-bold bg-black/70 px-4 py-1.5 rounded-full backdrop-blur-md">
-                ALIGN FACE HERE 👶
-              </span>
-            </div>
-
-            {/* Top Bar controls */}
-            <div className="absolute top-4 inset-x-4 flex justify-between items-center z-10">
+            {selfieImage && (
               <button
-                onClick={stopCamera}
-                className="p-2.5 rounded-full bg-black/60 text-white backdrop-blur-md hover:bg-black/80"
+                onClick={handleResetSelfie}
+                className="text-xs font-mono text-[#d0c5af] hover:text-[#f2ca50] flex items-center gap-1 underline"
               >
-                <span className="material-symbols-outlined text-xl">close</span>
+                Retake / New
               </button>
+            )}
+          </div>
 
-              <button
-                onClick={() => {
-                  setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
-                  setTimeout(startCamera, 100);
-                }}
-                className="p-2.5 rounded-full bg-black/60 text-white backdrop-blur-md hover:bg-black/80 flex items-center gap-1 font-mono text-xs px-3"
-                title="Switch Camera"
-              >
-                <span className="material-symbols-outlined text-base">flip_camera_ios</span>
-                <span>{facingMode === 'user' ? 'FRONT 🤳' : 'REAR 📸'}</span>
-              </button>
-            </div>
-
-            {/* Bottom Shutter Action */}
-            <div className="absolute bottom-6 inset-x-0 flex flex-col items-center justify-center gap-2">
-              <button
-                onClick={handleCaptureWebcam}
-                className="w-20 h-20 rounded-full border-4 border-white bg-[#f2ca50] flex items-center justify-center shadow-2xl hover:scale-105 active:scale-90 transition-transform"
-              >
-                <div className="w-14 h-14 rounded-full border-2 border-[#3c2f00] bg-white/20 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-2xl text-[#3c2f00]">photo_camera</span>
+          {/* Selfie Display Box */}
+          <div className="relative aspect-square rounded-xl bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
+            {isCameraActive ? (
+              <div className="relative w-full h-full">
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover transform -scale-x-100"
+                />
+                {/* Face Frame Overlay */}
+                <div className="absolute inset-0 border-2 border-dashed border-[#f2ca50]/60 m-8 rounded-full pointer-events-none animate-pulse flex items-center justify-center">
+                  <span className="text-[10px] font-mono text-[#f2ca50] bg-black/60 px-2 py-1 rounded">
+                    ALIGN FACE
+                  </span>
                 </div>
-              </button>
-              <span className="font-mono text-[11px] text-white/90 bg-black/50 px-3 py-0.5 rounded-full backdrop-blur-sm">
-                Tap to Take Selfie
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SCANNING & AI MATCHING ANIMATION */}
-      {isScanning && selfieImage && (
-        <div className="max-w-md mx-auto glass-panel p-8 rounded-3xl text-center space-y-6 border-[#f2ca50]/50 animate-in zoom-in-95 duration-300">
-          <div className="relative aspect-square max-w-[220px] mx-auto rounded-2xl overflow-hidden border-2 border-[#f2ca50]/80 shadow-2xl">
-            <img src={selfieImage} alt="User selfie" className="w-full h-full object-cover filter brightness-90" />
-            
-            {/* Hologram Laser Scan Line */}
-            <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#f2ca50] to-transparent shadow-[0_0_15px_#f2ca50] animate-bounce" />
-            
-            {/* Face Mesh Points Simulation */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-32 h-32 border border-emerald-400/80 rounded-full animate-ping opacity-40" />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-center gap-2 text-[#f2ca50] font-mono font-bold text-sm">
-              <span className="w-2 h-2 bg-[#f2ca50] rounded-full animate-ping" />
-              MATCHING FACIAL FEATURES... {scanProgress}% ✨
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#f2ca50] to-amber-300 transition-all duration-300"
-                style={{ width: `${scanProgress}%` }}
-              />
-            </div>
-
-            <p className="font-mono text-[11px] text-[#d0c5af]/80">
-              Scanning Naming Ceremony live gallery photos for your face... 👶🍼
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 2: PERSONALIZED MATCHED GALLERY RESULTS */}
-      {!isScanning && matchedResults && selfieImage && (
-        <div className="space-y-10 animate-in fade-in duration-300">
-          {/* Status Header Bar */}
-          <div className="glass-panel p-6 rounded-3xl border-[#f2ca50]/40 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-[#f2ca50] shrink-0 shadow-lg">
-                <img src={selfieImage} alt="Your selfie" className="w-full h-full object-cover" />
               </div>
-
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
-                  <h3 className="font-display font-bold text-xl text-[#e5e2e1]">
-                    Matched {matchedPhotos.length} Photos of You! 🎉👶
-                  </h3>
+            ) : selfieImage ? (
+              <div className="relative w-full h-full">
+                <img
+                  src={selfieImage}
+                  alt="Your reference selfie"
+                  className="w-full h-full object-cover"
+                />
+                {/* Scanning Laser Effect */}
+                {isScanning && (
+                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex flex-col items-center justify-center p-4">
+                    <div className="w-full h-1 bg-[#f2ca50] shadow-[0_0_15px_#f2ca50] animate-bounce mb-4" />
+                    <span className="material-symbols-outlined text-4xl text-[#f2ca50] animate-spin mb-2">
+                      sync
+                    </span>
+                    <p className="font-mono text-xs text-[#f2ca50] uppercase tracking-widest text-center">
+                      SCANNING CEREMONY PHOTOS... {scanProgress}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center p-6 flex flex-col items-center">
+                <div className="w-16 h-16 rounded-full bg-[#f2ca50]/10 flex items-center justify-center mb-3 border border-[#f2ca50]/30 text-[#f2ca50]">
+                  <span className="material-symbols-outlined text-3xl">face_5</span>
                 </div>
-                <p className="font-mono text-xs text-[#d0c5af]/80 mt-0.5">
-                  Here are your personal photos from the Naming Ceremony celebration.
+                <p className="text-sm font-medium text-[#e5e2e1]">No Selfie Loaded Yet</p>
+                <p className="text-xs text-[#c4b595] mt-1">
+                  Take a front camera photo or choose from gallery to match your face.
                 </p>
               </div>
-            </div>
+            )}
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              {/* Batch Download Button */}
-              {matchedPhotos.length > 0 && (
-                <button
-                  onClick={handleDownloadAllMatched}
-                  disabled={downloadingBatch}
-                  className="px-6 py-3 rounded-full bg-emerald-500 text-black font-mono text-xs font-extrabold flex items-center justify-center gap-2 hover:bg-emerald-400 active:scale-95 transition-all shadow-xl shadow-emerald-500/20"
-                >
-                  <span className="material-symbols-outlined text-base">download_for_offline</span>
-                  <span>{downloadingBatch ? 'DOWNLOADING...' : `DOWNLOAD ALL (${matchedPhotos.length} PHOTOS) 📥`}</span>
-                </button>
-              )}
-
-              <button
-                onClick={handleReset}
-                className="px-5 py-3 rounded-full bg-white/10 hover:bg-white/15 text-[#e5e2e1] font-mono text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
-              >
-                <span className="material-symbols-outlined text-sm">replay</span>
-                NEW SELFIE 🤳
-              </button>
-
-              <button
-                onClick={() => setActiveTab('gallery')}
-                className="px-5 py-3 rounded-full bg-[#f2ca50] text-[#3c2f00] font-mono text-xs font-bold flex items-center justify-center gap-2 hover:scale-105 transition-all shadow-lg"
-              >
-                <span className="material-symbols-outlined text-sm">grid_view</span>
-                ALL PHOTOS 🖼️
-              </button>
-            </div>
+            <canvas ref={canvasRef} className="hidden" />
           </div>
 
-          {/* Download Status Toast */}
-          {downloadStatus && (
-            <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 p-4 rounded-2xl font-mono text-xs text-center animate-in fade-in flex items-center justify-center gap-2">
-              <span className="material-symbols-outlined text-base animate-bounce">downloading</span>
-              <span>{downloadStatus}</span>
-            </div>
+          {cameraError && (
+            <p className="text-xs text-red-400 mt-3 font-sans bg-red-950/40 border border-red-500/30 p-2 rounded-lg">
+              {cameraError}
+            </p>
           )}
 
-          {/* Matched Photos Grid */}
-          {matchedPhotos.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {matchedPhotos.map((photo) => (
-                <div
-                  key={photo.id}
-                  onClick={() => onSelectPhoto(photo)}
-                  className="group relative glass-panel rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] cursor-pointer border-white/10 hover:border-[#f2ca50]/50 shadow-xl"
+          {/* Action Control Buttons */}
+          <div className="mt-5 space-y-3">
+            {isCameraActive ? (
+              <button
+                onClick={captureSelfie}
+                className="w-full py-3 bg-gradient-to-r from-[#f2ca50] to-[#dca51a] text-[#1a1400] font-bold text-sm rounded-xl shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined">photo_camera</span>
+                CAPTURE & MATCH FACE
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={startCamera}
+                  className="w-full py-3 bg-[#f2ca50] text-[#1a1400] font-bold text-sm rounded-xl shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2"
                 >
-                  {/* Photo Image Aspect 4/5 */}
-                  <div className="aspect-[4/5] relative overflow-hidden bg-[#201f1f]">
-                    <img
-                      src={photo.url}
-                      alt={photo.caption}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-80" />
+                  <span className="material-symbols-outlined">camera_front</span>
+                  OPEN CAMERA (ಸೆಲ್ಫಿ)
+                </button>
 
-                    {/* Top Badges */}
-                    <div className="absolute top-3 left-3 flex justify-between items-center">
-                      <div className="bg-[#f2ca50] text-[#3c2f00] font-mono font-bold text-[11px] px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">verified</span>
-                        {photo.matchConfidence}% MATCH ✨
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Content Footer */}
-                  <div className="p-5 space-y-3">
-                    <p className="text-[#e5e2e1] font-body text-sm line-clamp-2">{photo.caption}</p>
-
-                    {photo.matchReason && (
-                      <p className="font-mono text-[11px] text-[#d0c5af]/80 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs text-[#f2ca50]">auto_awesome</span>
-                        {photo.matchReason}
-                      </p>
-                    )}
-
-                    <div className="flex items-center justify-between pt-3 border-t border-white/5 font-mono text-xs text-[#d0c5af]/80">
-                      <span>{photo.timeAgo}</span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const res = await fetch(photo.url);
-                              const blob = await res.blob();
-                              const blobUrl = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = blobUrl;
-                              a.download = `naming-ceremony-${photo.id}.jpg`;
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                            } catch (err) {
-                              window.open(photo.url, '_blank');
-                            }
-                          }}
-                          className="px-3 py-1 rounded-full bg-white/10 hover:bg-[#f2ca50] hover:text-[#3c2f00] text-xs font-mono font-bold flex items-center gap-1 transition-colors"
-                          title="Download photo"
-                        >
-                          <span className="material-symbols-outlined text-xs">download</span>
-                          DOWNLOAD
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onLikePhoto(photo.id);
-                          }}
-                          className="flex items-center gap-1 hover:text-[#f2ca50] transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-sm text-[#f2ca50]">favorite</span>
-                          <span>{photo.likesCount}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                <div className="relative">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-2.5 bg-white/5 border border-white/15 text-[#e5e2e1] hover:bg-white/10 font-mono text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-base">upload_file</span>
+                    UPLOAD SELFIE FROM GALLERY
+                  </button>
                 </div>
-              ))}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Matched Photo Results Grid */}
+        <div className="lg:col-span-8">
+          {isScanning ? (
+            <div className="bg-[#1a1612] border border-[#f2ca50]/20 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[380px]">
+              <div className="w-16 h-16 rounded-full bg-[#f2ca50]/10 border border-[#f2ca50]/40 flex items-center justify-center text-[#f2ca50] mb-4 animate-pulse">
+                <span className="material-symbols-outlined text-3xl animate-spin">
+                  search_hands_free
+                </span>
+              </div>
+              <h3 className="font-display font-bold text-xl text-[#f2ca50] mb-2">
+                Analyzing Facial Contours & Matches
+              </h3>
+              <p className="text-sm text-[#c4b595] max-w-md mb-6 font-sans">
+                AI is cross-referencing your facial profile across all ceremony gallery uploads...
+              </p>
+              <div className="w-full max-w-xs bg-black/60 h-2.5 rounded-full overflow-hidden border border-white/10">
+                <div
+                  className="bg-gradient-to-r from-[#f2ca50] to-[#e6a817] h-full transition-all duration-300"
+                  style={{ width: `${scanProgress}%` }}
+                />
+              </div>
+            </div>
+          ) : matchedResults !== null ? (
+            <div>
+              {/* Results Top Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#1a1612] border border-[#f2ca50]/20 p-4 rounded-xl mb-6 shadow-xl">
+                <div>
+                  <h3 className="font-display font-bold text-lg text-[#f2ca50] flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[#f2ca50]">check_circle</span>
+                    Found {matchedPhotosWithConfidence.length} Photos Matching Your Face!
+                  </h3>
+                  <p className="text-xs text-[#c4b595] font-sans">
+                    ನಿಮ್ಮ ಮುಖಕ್ಕೆ ಹೊಂದುವ ಫೋಟೋಗಳನ್ನು ಕೆಳಗೆ ಪರಿಶೀಲಿಸಿ.
+                  </p>
+                </div>
+
+                {matchedPhotosWithConfidence.length > 0 && (
+                  <button
+                    onClick={handleDownloadAllMatches}
+                    className="px-4 py-2 bg-[#f2ca50] text-[#1a1400] font-bold text-xs uppercase tracking-wider rounded-lg shadow-md hover:brightness-110 transition-all flex items-center gap-2 self-start sm:self-auto"
+                  >
+                    <span className="material-symbols-outlined text-sm">download</span>
+                    DOWNLOAD ALL ({matchedPhotosWithConfidence.length})
+                  </button>
+                )}
+              </div>
+
+              {matchedPhotosWithConfidence.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
+                  {matchedPhotosWithConfidence.map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="group bg-[#1a1612] border border-[#f2ca50]/25 rounded-2xl overflow-hidden shadow-xl hover:border-[#f2ca50] transition-all duration-300 flex flex-col"
+                    >
+                      {/* Photo Image Container */}
+                      <div
+                        className="relative aspect-4/3 overflow-hidden cursor-pointer bg-black/60"
+                        onClick={() => onOpenLightbox(photo)}
+                      >
+                        <img
+                          src={photo.url}
+                          alt={photo.caption}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-70 group-hover:opacity-50 transition-opacity" />
+
+                        {/* Top Confidence Badge */}
+                        <div className="absolute top-3 left-3 bg-[#f2ca50] text-[#1a1400] font-mono font-bold text-[11px] px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">verified</span>
+                          {photo.matchConfidence}% MATCH
+                        </div>
+                      </div>
+
+                      {/* Photo Info & Action Footer */}
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                          <p className="text-xs text-[#e5e2e1] font-sans font-medium line-clamp-2">
+                            {photo.caption}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2 text-[11px] text-[#c4b595] font-mono">
+                            <span className="material-symbols-outlined text-xs text-[#f2ca50]">
+                              auto_awesome
+                            </span>
+                            <span>{photo.matchReason || 'Verified face contour'}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                          <span className="text-[10px] text-[#c4b595] font-mono">
+                            {photo.timeAgo || 'Ceremony Live'}
+                          </span>
+                          <a
+                            href={photo.url}
+                            download={`ceremony-photo-${photo.id}.jpg`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-3 py-1.5 bg-white/10 hover:bg-[#f2ca50] hover:text-[#1a1400] text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-xs">download</span>
+                            DOWNLOAD
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-[#1a1612] border border-white/10 rounded-2xl p-10 text-center flex flex-col items-center">
+                  <span className="material-symbols-outlined text-4xl text-[#c4b595] mb-3">
+                    sentiment_dissatisfied
+                  </span>
+                  <h4 className="font-display font-bold text-lg text-[#e5e2e1] mb-1">
+                    No Matching Face Found
+                  </h4>
+                  <p className="text-xs text-[#c4b595] max-w-sm mb-5 font-sans">
+                    We couldn't detect your face in the current photographer uploads. Try taking another selfie with good lighting.
+                  </p>
+                  <button
+                    onClick={onGoToGallery}
+                    className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-xs font-mono font-bold uppercase tracking-wider rounded-xl transition-all"
+                  >
+                    BROWSE ALL CEREMONY PHOTOS
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="text-center p-12 glass-panel rounded-3xl space-y-4 max-w-md mx-auto">
-              <span className="material-symbols-outlined text-5xl text-[#d0c5af]/50">person_search</span>
-              <h3 className="font-display font-bold text-xl text-[#e5e2e1]">No Matches Found Yet</h3>
-              <p className="text-xs text-[#d0c5af]/70 font-body">
-                We couldn't locate photos matching your face in the current ceremony uploads.
-                Try taking another selfie or check back as photographers upload new photos! 📸
+            /* Initial Empty Guidance Card */
+            <div className="bg-[#1a1612] border border-[#f2ca50]/20 rounded-2xl p-10 text-center flex flex-col items-center justify-center min-h-[380px] shadow-xl">
+              <div className="w-16 h-16 rounded-full bg-[#f2ca50]/10 border border-[#f2ca50]/30 flex items-center justify-center text-[#f2ca50] mb-4">
+                <span className="material-symbols-outlined text-3xl">face_retouching_natural</span>
+              </div>
+              <h3 className="font-display font-bold text-xl text-[#f2ca50] mb-2">
+                Ready for AI Face Scanning
+              </h3>
+              <p className="text-sm text-[#c4b595] max-w-md mb-6 font-sans leading-relaxed">
+                Open your camera on the left or upload a clear front face photo to discover all pictures where you appear!
               </p>
-              <button
-                onClick={handleReset}
-                className="px-6 py-3 bg-[#f2ca50] text-[#3c2f00] font-mono font-bold text-xs rounded-full hover:scale-105 transition-all"
-              >
-                TRY AGAIN WITH NEW SELFIE 🤳
-              </button>
+              <div className="flex items-center gap-3 text-xs font-mono text-[#f2ca50] bg-[#f2ca50]/10 px-4 py-2 rounded-full border border-[#f2ca50]/20">
+                <span className="material-symbols-outlined text-sm">shield</span>
+                <span>Private & Instant Canvas Recognition</span>
+              </div>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

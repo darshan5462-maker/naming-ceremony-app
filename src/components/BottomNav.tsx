@@ -14,7 +14,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         onClick={() => setActiveTab('gallery')}
         className={`flex flex-col items-center justify-center transition-all duration-200 ${
           activeTab === 'gallery'
-            ? 'text-[#f2ca50] scale-110'
+            ? 'text-[#f2ca50] scale-105'
             : 'text-[#d0c5af]/70 hover:text-[#f2ca50] active:scale-90'
         }`}
       >
@@ -24,7 +24,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         >
           grid_view
         </span>
-        <span className="font-mono text-[11px] mt-0.5 tracking-wider">Gallery</span>
+        <span className="font-mono text-[10px] mt-0.5 tracking-wider font-semibold">ಗ್ಯಾಲರಿ</span>
       </button>
 
       {/* Face Match Tab */}
@@ -32,7 +32,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         onClick={() => setActiveTab('facematch')}
         className={`flex flex-col items-center justify-center transition-all duration-200 ${
           activeTab === 'facematch'
-            ? 'text-[#f2ca50] scale-110'
+            ? 'text-[#f2ca50] scale-105'
             : 'text-[#d0c5af]/70 hover:text-[#f2ca50] active:scale-90'
         }`}
       >
@@ -42,7 +42,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         >
           face
         </span>
-        <span className="font-mono text-[11px] mt-0.5 tracking-wider">Face Match</span>
+        <span className="font-mono text-[10px] mt-0.5 tracking-wider font-semibold">ಮುಖ ಗುರುತು</span>
+      </button>
+
+      {/* Upload Tab */}
+      <button
+        onClick={() => setActiveTab('upload')}
+        className={`flex flex-col items-center justify-center transition-all duration-200 ${
+          activeTab === 'upload'
+            ? 'text-[#f2ca50] scale-105'
+            : 'text-[#d0c5af]/70 hover:text-[#f2ca50] active:scale-90'
+        }`}
+      >
+        <span
+          className="material-symbols-outlined text-2xl"
+          style={{ fontVariationSettings: activeTab === 'upload' ? "'FILL' 1" : "'FILL' 0" }}
+        >
+          add_circle
+        </span>
+        <span className="font-mono text-[10px] mt-0.5 tracking-wider font-semibold">ಅಪ್ಲೋಡ್</span>
       </button>
 
       {/* Scan QR Tab */}
@@ -50,7 +68,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         onClick={() => setActiveTab('scan')}
         className={`flex flex-col items-center justify-center transition-all duration-200 ${
           activeTab === 'scan'
-            ? 'text-[#f2ca50] scale-110'
+            ? 'text-[#f2ca50] scale-105'
             : 'text-[#d0c5af]/70 hover:text-[#f2ca50] active:scale-90'
         }`}
       >
@@ -60,7 +78,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
         >
           qr_code_scanner
         </span>
-        <span className="font-mono text-[11px] mt-0.5 tracking-wider">Scan</span>
+        <span className="font-mono text-[10px] mt-0.5 tracking-wider font-semibold">ಸ್ಕ್ಯಾನ್</span>
       </button>
     </nav>
   );

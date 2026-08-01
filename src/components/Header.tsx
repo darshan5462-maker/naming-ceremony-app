@@ -29,12 +29,24 @@ export const Header: React.FC<HeaderProps> = ({
         className="flex items-center gap-3 cursor-pointer group"
         onClick={() => setActiveTab('gallery')}
       >
-        <span className="material-symbols-outlined text-[#f2ca50] text-2xl group-hover:scale-110 transition-transform">
-          child_care
-        </span>
-        <h1 className="font-display font-bold text-lg md:text-xl tracking-tight text-[#f2ca50] uppercase flex items-center gap-1.5">
-          NAMING CEREMONY <span className="text-base">👶✨</span> <span className="text-xs text-[#d0c5af] font-normal tracking-widest ml-1 hidden sm:inline border-l border-white/20 pl-2">AUG 5</span>
-        </h1>
+        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#f2ca50] to-[#e6a817] p-[1px] shadow-lg shadow-[#f2ca50]/10 group-hover:scale-105 transition-transform">
+          <div className="w-full h-full bg-[#171411] rounded-full flex items-center justify-center">
+            <span className="material-symbols-outlined text-[#f2ca50] text-xl">
+              child_care
+            </span>
+          </div>
+        </div>
+        <div>
+          <h1 className="font-display font-bold text-base md:text-lg tracking-tight text-[#f2ca50] uppercase flex items-center gap-2">
+            <span>NAMING CEREMONY</span>
+            <span className="bg-[#f2ca50]/15 text-[#f2ca50] text-[11px] px-2 py-0.5 rounded-full font-medium border border-[#f2ca50]/30 hidden sm:inline-block">
+              ನಾಮಕರಣ ಮಹೋತ್ಸವ
+            </span>
+          </h1>
+          <p className="text-[10px] text-[#c4b595] font-mono tracking-widest hidden md:block">
+            ಆಗಸ್ಟ್ ೫, ೨೦೨೬ • ROYAL PALACE
+          </p>
+        </div>
       </div>
 
       {/* Center Search input if toggled */}
@@ -62,31 +74,53 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       ) : (
         /* Desktop Navigation Links */
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden md:flex items-center gap-6">
           <button
             onClick={() => setActiveTab('gallery')}
-            className={`font-mono text-xs tracking-wider uppercase transition-colors ${
-              activeTab === 'gallery' ? 'text-[#f2ca50] active-dot font-semibold' : 'text-[#d0c5af] hover:text-[#f2ca50]'
+            className={`font-mono text-xs tracking-wider uppercase transition-all px-3 py-1.5 rounded-full flex flex-col items-center ${
+              activeTab === 'gallery'
+                ? 'bg-[#f2ca50] text-[#1a1400] font-bold shadow-md shadow-[#f2ca50]/20'
+                : 'text-[#d0c5af] hover:text-[#f2ca50] hover:bg-white/5'
             }`}
           >
-            GALLERY
+            <span>GALLERY</span>
+            <span className="text-[9px] font-sans tracking-normal font-normal opacity-80">ಗ್ಯಾಲರಿ</span>
           </button>
           <button
             onClick={() => setActiveTab('facematch')}
-            className={`font-mono text-xs tracking-wider uppercase transition-colors flex items-center gap-1.5 ${
-              activeTab === 'facematch' ? 'text-[#f2ca50] active-dot font-semibold' : 'text-[#d0c5af] hover:text-[#f2ca50]'
+            className={`font-mono text-xs tracking-wider uppercase transition-all px-3 py-1.5 rounded-full flex flex-col items-center gap-0.5 ${
+              activeTab === 'facematch'
+                ? 'bg-[#f2ca50] text-[#1a1400] font-bold shadow-md shadow-[#f2ca50]/20'
+                : 'text-[#d0c5af] hover:text-[#f2ca50] hover:bg-white/5'
             }`}
           >
-            <span className="material-symbols-outlined text-sm">face</span>
-            FIND MY FACE
+            <span className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">face</span>
+              FIND MY FACE
+            </span>
+            <span className="text-[9px] font-sans tracking-normal font-normal opacity-80">ಮುಖದ ಗುರುತು</span>
           </button>
           <button
             onClick={() => setActiveTab('scan')}
-            className={`font-mono text-xs tracking-wider uppercase transition-colors ${
-              activeTab === 'scan' ? 'text-[#f2ca50] active-dot font-semibold' : 'text-[#d0c5af] hover:text-[#f2ca50]'
+            className={`font-mono text-xs tracking-wider uppercase transition-all px-3 py-1.5 rounded-full flex flex-col items-center ${
+              activeTab === 'scan'
+                ? 'bg-[#f2ca50] text-[#1a1400] font-bold shadow-md shadow-[#f2ca50]/20'
+                : 'text-[#d0c5af] hover:text-[#f2ca50] hover:bg-white/5'
             }`}
           >
-            QR SIGNAGE
+            <span>QR SIGNAGE</span>
+            <span className="text-[9px] font-sans tracking-normal font-normal opacity-80">ಸ್ಕ್ಯಾನ್ ಮಾಡಿ</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('upload')}
+            className={`font-mono text-xs tracking-wider uppercase transition-all px-3 py-1.5 rounded-full flex flex-col items-center ${
+              activeTab === 'upload'
+                ? 'bg-[#f2ca50] text-[#1a1400] font-bold shadow-md shadow-[#f2ca50]/20'
+                : 'text-[#d0c5af] hover:text-[#f2ca50] hover:bg-white/5'
+            }`}
+          >
+            <span>UPLOAD</span>
+            <span className="text-[9px] font-sans tracking-normal font-normal opacity-80">ಅಪ್ಲೋಡ್</span>
           </button>
         </nav>
       )}
